@@ -2,14 +2,27 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import os
 from datetime import datetime
-import plotly.express as px
-import plotly.graph_objects as go
+
+# Try to import optional dependencies
+try:
+    import joblib
+
+    JOBLIB_AVAILABLE = True
+except ImportError:
+    JOBLIB_AVAILABLE = False
+
+try:
+    import plotly.graph_objects as go
+
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+
 # Set page configuration
 st.set_page_config(
-    page_title="Heart Disease Predictor Pro",
+    page_title="Heart Disease Predictor",
     page_icon="❤️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,13 +38,7 @@ st.markdown("""
         margin-bottom: 1rem;
         font-weight: bold;
     }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #2e86ab;
-        margin: 1rem 0;
-    }
     .prediction-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
         border-radius: 15px;
         color: white;
@@ -62,12 +69,16 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-# Predictor class
+
+
 class HeartDiseasePredictor:
     def __init__(self):
         self.model = None
-        self.feature_names = None
-        self.load_model()
+        self.feature_names = [
+            'Age', 'Sex', 'Chest pain type', 'BP', 'Cholesterol',
+            'FBS over 120', 'EKG results', 'Max HR', 'Exercise angina',
+            'ST depression', 'Slope of ST', 'Number of vessels fluro', 'Thallium'
+        ]
 
         self.feature_info = {
             'Age': {
@@ -85,10 +96,10 @@ class HeartDiseasePredictor:
                 'desc': 'Type of chest pain',
                 'type': 'select',
                 'options': {
-                    '1': 'Typical angina (1)',
-                    '2': 'Atypical angina (2)',
-                    '3': 'Non-anginal pain (3)',
-                    '4': 'Asymptomatic (4)'
+                    '1': 'Typical angina',
+                    '2': 'Atypical angina',
+                    '3': 'Non-anginal pain',
+                    '4': 'Asymptomatic'
                 }
             },
             'BP': {
@@ -112,9 +123,9 @@ class HeartDiseasePredictor:
                 'desc': 'Resting electrocardiographic results',
                 'type': 'select',
                 'options': {
-                    '0': 'Normal (0)',
-                    '1': 'ST-T wave abnormality (1)',
-                    '2': 'Left ventricular hypertrophy (2)'
+                    '0': 'Normal',
+                    '1': 'ST-T wave abnormality',
+                    '2': 'Left ventricular hypertrophy'
                 }
             },
             'Max HR': {
@@ -138,9 +149,9 @@ class HeartDiseasePredictor:
                 'desc': 'Slope of peak exercise ST segment',
                 'type': 'select',
                 'options': {
-                    '1': 'Upsloping (1)',
-                    '2': 'Flat (2)',
-                    '3': 'Downsloping (3)'
+                    '1': 'Upsloping',
+                    '2': 'Flat',
+                    '3': 'Downsloping'
                 }
             },
             'Number of vessels fluro': {
@@ -152,58 +163,121 @@ class HeartDiseasePredictor:
                 'desc': 'Thallium stress test result',
                 'type': 'select',
                 'options': {
-                    '3': 'Normal (3)',
-                    '6': 'Fixed defect (6)',
-                    '7': 'Reversible defect (7)'
+                    '3': 'Normal',
+                    '6': 'Fixed defect',
+                    '7': 'Reversible defect'
                 }
             }
         }
 
+        self.load_model()
+
     def load_model(self):
         """Load the trained model and feature names"""
         try:
-            self.model = joblib.load('models/optimized_random_forest_model.pkl')
-            self.feature_names = joblib.load('models/feature_names.pkl')
-            st.sidebar.success("✅ Model loaded successfully!")
+            if JOBLIB_AVAILABLE and os.path.exists('models/optimized_random_forest_model.pkl'):
+                self.model = joblib.load('models/optimized_random_forest_model.pkl')
+                if os.path.exists('models/feature_names.pkl'):
+                    self.feature_names = joblib.load('models/feature_names.pkl')
+                st.sidebar.success("✅ AI Model Loaded Successfully!")
+            else:
+                st.sidebar.info("🤖 Using Rule-Based System (AI model not found)")
         except Exception as e:
-            st.error(f"❌ Error loading model: {e}")
-            st.info("Please ensure you have run the training script first.")
+            st.sidebar.info("🤖 Using Rule-Based System")
 
     def get_risk_level(self, probability):
         """Determine risk level based on prediction probability"""
         if probability < 0.3:
-            return 'Low', '🟢', 'risk-low', "Continue healthy lifestyle with regular checkups."
+            return 'Low', '🟢', 'risk-low', "Continue healthy lifestyle with regular checkups. Maintain balanced diet and exercise routine."
         elif probability < 0.6:
-            return 'Medium', '🟡', 'risk-medium', "Consider consulting a healthcare provider for routine evaluation."
+            return 'Medium', '🟡', 'risk-medium', "Consider consulting a healthcare provider for routine evaluation. Monitor your health parameters regularly."
         elif probability < 0.8:
-            return 'High', '🟠', 'risk-high', "Recommended to consult a cardiologist for comprehensive assessment."
+            return 'High', '🟠', 'risk-high', "Recommended to consult a cardiologist for comprehensive assessment. Schedule appointment within 2 weeks."
         else:
-            return 'Very High', '🔴', 'risk-high', "Immediate medical consultation strongly recommended."
+            return 'Very High', '🔴', 'risk-high', "Immediate medical consultation strongly recommended. Please visit healthcare provider soon."
+
+    def rule_based_prediction(self, input_data):
+        """Rule-based prediction when ML model is not available"""
+        risk_score = 0
+
+        # Age factor
+        if input_data['Age'] > 55:
+            risk_score += 2
+        elif input_data['Age'] > 45:
+            risk_score += 1
+
+        # Blood pressure factor
+        if input_data['BP'] > 160:
+            risk_score += 3
+        elif input_data['BP'] > 140:
+            risk_score += 2
+        elif input_data['BP'] > 130:
+            risk_score += 1
+
+        # Cholesterol factor
+        if input_data['Cholesterol'] > 300:
+            risk_score += 3
+        elif input_data['Cholesterol'] > 240:
+            risk_score += 2
+        elif input_data['Cholesterol'] > 200:
+            risk_score += 1
+
+        # Chest pain factor
+        if input_data['Chest pain type'] == 4:
+            risk_score += 3  # Asymptomatic
+        elif input_data['Chest pain type'] == 3:
+            risk_score += 2  # Non-anginal
+
+        # ST depression factor
+        if input_data['ST depression'] > 2.0:
+            risk_score += 2
+        elif input_data['ST depression'] > 1.0:
+            risk_score += 1
+
+        # Other factors
+        if input_data['Exercise angina'] == 1: risk_score += 2
+        if input_data['Thallium'] == 7: risk_score += 2
+        if input_data['Number of vessels fluro'] >= 2: risk_score += 2
+
+        # Calculate probability (normalized to 0-1 scale)
+        probability = min(risk_score / 15, 0.95)
+
+        return probability
 
     def predict(self, input_data):
         """Make prediction for heart disease"""
         try:
-            input_df = pd.DataFrame([input_data])
-            input_df = input_df[self.feature_names]
-
-            prediction = self.model.predict(input_df)[0]
-            probability = self.model.predict_proba(input_df)[0][1]
+            if self.model and JOBLIB_AVAILABLE:
+                # ML Model prediction
+                input_df = pd.DataFrame([input_data])
+                input_df = input_df[self.feature_names]
+                probability = self.model.predict_proba(input_df)[0][1]
+                method = "AI Machine Learning Model"
+            else:
+                # Rule-based prediction
+                probability = self.rule_based_prediction(input_data)
+                method = "Medical Rule-Based System"
 
             risk_level, risk_emoji, risk_class, recommendation = self.get_risk_level(probability)
 
             return {
-                'prediction': prediction,
+                'prediction': 1 if probability > 0.5 else 0,
                 'probability': probability,
                 'risk_level': risk_level,
                 'risk_emoji': risk_emoji,
                 'risk_class': risk_class,
                 'recommendation': recommendation,
+                'method': method,
                 'success': True
             }
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
 
-#Sidebar function
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+
 def create_sidebar():
     """Create the sidebar with information and controls"""
     st.sidebar.title("❤️ Heart Disease Predictor")
@@ -211,25 +285,25 @@ def create_sidebar():
     st.sidebar.markdown("---")
     st.sidebar.subheader("About")
     st.sidebar.info("""
-     This AI-powered system predicts heart disease risk using machine learning algorithms trained on clinical data.
+    This AI-powered system predicts heart disease risk using machine learning and medical rules.
 
-     **Medical Disclaimer:**
-     This tool is for educational and screening purposes only. Always consult healthcare professionals for medical diagnosis.
-     """)
+    **Medical Disclaimer:**
+    This tool is for educational and screening purposes only. Always consult healthcare professionals for medical diagnosis.
+    """)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Model Information")
+    st.sidebar.subheader("System Status")
 
-    # Display model info if available
-    try:
-        model = joblib.load('models/optimized_random_forest_model.pkl')
-        st.sidebar.write(f"**Algorithm:** {type(model).__name__}")
-        if hasattr(model, 'feature_importances_'):
-            st.sidebar.write("**Status:** ✅ Trained & Ready")
-        else:
-            st.sidebar.write("**Status:** ⚠️ Basic Model")
-    except:
-        st.sidebar.write("**Status:** ❌ Not Loaded")
+    # Dependency status
+    if JOBLIB_AVAILABLE:
+        st.sidebar.success("✅ ML Engine: Available")
+    else:
+        st.sidebar.warning("⚠️ ML Engine: Limited")
+
+    if PLOTLY_AVAILABLE:
+        st.sidebar.success("✅ Visualizations: Available")
+    else:
+        st.sidebar.warning("⚠️ Visualizations: Basic")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Quick Actions")
@@ -239,90 +313,82 @@ def create_sidebar():
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("""
-     <div style='text-align: center; color: #666; font-size: 0.8rem;'>
-         Developed with ❤️ for Healthcare<br>
-         Version 1.0 • Medical AI
-     </div>
-     """, unsafe_allow_html=True)
-    # Input form function
-    def create_feature_input(feature, info):
-        """Create input for a single feature"""
-        with st.container():
-            if info['type'] == 'number':
-                value = st.number_input(
-                    label=f"**{feature}**",
-                    min_value=info['min'],
-                    max_value=info['max'],
-                    value=info.get('default', (info['min'] + info['max']) // 2),
-                    step=info['step'],
-                    help=info['desc']
-                )
-            elif info['type'] == 'select':
-                option_key = st.selectbox(
-                    label=f"**{feature}**",
-                    options=list(info['options'].keys()),
-                    format_func=lambda x: f"{info['options'][x]}",
-                    help=info['desc']
-                )
-                value = int(option_key)
+    <div style='text-align: center; color: #666; font-size: 0.8rem;'>
+        Developed with ❤️ for Healthcare<br>
+        Version 1.0 • Medical AI
+    </div>
+    """, unsafe_allow_html=True)
 
-            # Show normal range if available
-            if 'normal_range' in info:
-                min_val, max_val = info['normal_range']
-                current_value = value
-                if hasattr(current_value, 'dtype'):
-                    current_value = float(current_value)
 
-                if min_val <= current_value <= max_val:
-                    st.markdown(
-                        f"<span style='color: green; font-size: 0.8rem;'>✓ Within normal range ({min_val}-{max_val})</span>",
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f"<span style='color: orange; font-size: 0.8rem;'>⚠️ Outside normal range ({min_val}-{max_val})</span>",
-                        unsafe_allow_html=True)
+def create_feature_input(feature, info):
+    """Create input for a single feature"""
+    with st.container():
+        if info['type'] == 'number':
+            value = st.number_input(
+                label=f"**{feature}**",
+                min_value=info['min'],
+                max_value=info['max'],
+                value=info.get('default', (info['min'] + info['max']) // 2),
+                step=info['step'],
+                help=info['desc']
+            )
+        elif info['type'] == 'select':
+            option_key = st.selectbox(
+                label=f"**{feature}**",
+                options=list(info['options'].keys()),
+                format_func=lambda x: f"{info['options'][x]}",
+                help=info['desc']
+            )
+            value = int(option_key)
 
-            return value
+        # Show normal range if available
+        if 'normal_range' in info:
+            min_val, max_val = info['normal_range']
+            if min_val <= value <= max_val:
+                st.markdown(
+                    f"<span style='color: green; font-size: 0.8rem;'>✓ Within normal range ({min_val}-{max_val})</span>",
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f"<span style='color: orange; font-size: 0.8rem;'>⚠️ Outside normal range ({min_val}-{max_val})</span>",
+                    unsafe_allow_html=True)
 
-    def create_input_form(predictor):
-        """Create the main input form"""
-        st.markdown('<div class="main-header">Heart Disease Prediction System</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div style="text-align: center; color: #666; margin-bottom: 2rem;">AI-Powered Cardiac Risk Assessment</div>',
-            unsafe_allow_html=True)
+        return value
 
-        # Create tabs for different input methods
-        tab1, tab2 = st.tabs(["📝 Detailed Input", "⚡ Quick Assessment"])
 
-        with tab1:
-            st.subheader("Patient Clinical Data")
-            input_data = {}
+def create_input_form(predictor):
+    """Create the main input form"""
+    st.markdown('<div class="main-header">Heart Disease Prediction System</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align: center; color: #666; margin-bottom: 2rem;">AI-Powered Cardiac Risk Assessment</div>',
+        unsafe_allow_html=True)
 
-            # Create columns for better layout
-            col1, col2 = st.columns(2)
+    # Create tabs for different input methods
+    tab1, tab2 = st.tabs(["📝 Detailed Input", "⚡ Quick Assessment"])
 
-            features_list = list(predictor.feature_names)
-            mid_point = len(features_list) // 2
+    input_data = {}
 
-            with col1:
-                for feature in features_list[:mid_point]:
-                    input_data[feature] = create_feature_input(feature, predictor.feature_info[feature])
+    with tab1:
+        st.subheader("Patient Clinical Data")
 
-            with col2:
-                for feature in features_list[mid_point:]:
-                    input_data[feature] = create_feature_input(feature, predictor.feature_info[feature])
+        # Create columns for better layout
+        col1, col2 = st.columns(2)
 
-        with tab2:
-            st.subheader("Quick Health Assessment")
-            input_data = create_quick_assessment(predictor)
+        features_list = list(predictor.feature_names)
+        mid_point = len(features_list) // 2
 
-        return input_data
+        with col1:
+            for feature in features_list[:mid_point]:
+                input_data[feature] = create_feature_input(feature, predictor.feature_info[feature])
 
-    def create_quick_assessment(predictor):
-        """Create quick assessment form"""
+        with col2:
+            for feature in features_list[mid_point:]:
+                input_data[feature] = create_feature_input(feature, predictor.feature_info[feature])
+
+    with tab2:
+        st.subheader("Quick Health Assessment")
         st.info("Provide basic health information for preliminary assessment")
 
-        input_data = {}
         col1, col2 = st.columns(2)
 
         with col1:
@@ -350,8 +416,9 @@ def create_sidebar():
             for feature, default in default_values.items():
                 input_data[feature] = default
 
-        return input_data
-# Results display function
+    return input_data
+
+
 def display_metric_analysis(metric, value, info):
     """Display analysis for a single metric"""
     if 'normal_range' not in info:
@@ -366,7 +433,7 @@ def display_metric_analysis(metric, value, info):
         <h4>{metric}</h4>
         <h3 style="color: {color};">{value}</h3>
         <p>Status: <strong style="color: {color};">{status}</strong></p>
-        <p style="font-size: 0.8rem;">Normal: {min_val}-{max_val}</p>
+        <p style="font-size: 0.8rem;">Normal Range: {min_val}-{max_val}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -388,6 +455,7 @@ def display_results(results, input_data, predictor):
         <h2 style="color: white; margin: 0;">{risk_emoji} {results['risk_level']} RISK</h2>
         <h3 style="color: white; margin: 0.5rem 0;">Prediction: {'HEART DISEASE DETECTED' if results['prediction'] == 1 else 'NO HEART DISEASE DETECTED'}</h3>
         <h4 style="color: white; margin: 0;">Confidence: {results['probability']:.1%}</h4>
+        <p style="color: white; margin: 0.5rem 0 0 0; font-size: 0.9rem;">Method: {results['method']}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -395,35 +463,38 @@ def display_results(results, input_data, predictor):
     col1, col2 = st.columns(2)
 
     with col1:
-        # Probability chart
-        fig = go.Figure()
-        fig.add_trace(go.Indicator(
-            mode="gauge+number+delta",
-            value=results['probability'] * 100,
-            domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "Heart Disease Probability"},
-            delta={'reference': 50},
-            gauge={
-                'axis': {'range': [None, 100]},
-                'bar': {'color': "darkblue"},
-                'steps': [
-                    {'range': [0, 30], 'color': "lightgreen"},
-                    {'range': [30, 60], 'color': "yellow"},
-                    {'range': [60, 80], 'color': "orange"},
-                    {'range': [80, 100], 'color': "red"}
-                ],
-                'threshold': {
-                    'line': {'color': "red", 'width': 4},
-                    'thickness': 0.75,
-                    'value': 90
+        if PLOTLY_AVAILABLE:
+            # Probability gauge
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=results['probability'] * 100,
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "Heart Disease Probability"},
+                delta={'reference': 50},
+                gauge={
+                    'axis': {'range': [None, 100]},
+                    'bar': {'color': "darkblue"},
+                    'steps': [
+                        {'range': [0, 30], 'color': "lightgreen"},
+                        {'range': [30, 60], 'color': "yellow"},
+                        {'range': [60, 80], 'color': "orange"},
+                        {'range': [80, 100], 'color': "red"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': 90
+                    }
                 }
-            }
-        ))
-        fig.update_layout(height=300)
-        st.plotly_chart(fig, use_container_width=True)
+            ))
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            # Simple metric display
+            st.metric("Risk Probability", f"{results['probability']:.1%}")
+            st.metric("Risk Level", f"{results['risk_level']} {results['risk_emoji']}")
 
     with col2:
-        # Recommendations
         st.subheader("🎯 Medical Recommendations")
         st.info(results['recommendation'])
 
@@ -435,6 +506,15 @@ def display_results(results, input_data, predictor):
             - Consider stress echocardiogram
             - Lipid profile and cardiac markers test
             - Lifestyle modification program
+            - Regular blood pressure monitoring
+            """)
+        elif results['risk_level'] == 'Medium':
+            st.warning("""
+            **Suggested Actions:**
+            - Schedule routine health checkup
+            - Monitor blood pressure weekly
+            - Check cholesterol levels quarterly
+            - Maintain healthy diet and exercise
             """)
         else:
             st.success("""
@@ -443,6 +523,7 @@ def display_results(results, input_data, predictor):
             - Maintain healthy BMI
             - Regular physical activity
             - Balanced diet low in saturated fats
+            - No smoking, limited alcohol
             """)
 
     # Detailed analysis
@@ -452,13 +533,14 @@ def display_results(results, input_data, predictor):
     # Key parameters analysis
     col1, col2, col3 = st.columns(3)
 
-    key_metrics = ['Age', 'BP', 'Cholesterol']
+    key_metrics = ['Age', 'BP', 'Cholesterol', 'Max HR', 'ST depression']
 
     for i, metric in enumerate(key_metrics):
-        with [col1, col2, col3][i]:
-            if metric in input_data:
+        if metric in input_data:
+            with [col1, col2, col3][i % 3]:
                 display_metric_analysis(metric, input_data[metric], predictor.feature_info[metric])
-# Utility function
+
+
 def save_prediction(input_data, results):
     """Save prediction to history"""
     try:
@@ -468,7 +550,8 @@ def save_prediction(input_data, results):
             **input_data,
             'prediction': 'Heart Disease' if results['prediction'] == 1 else 'No Heart Disease',
             'probability': results['probability'],
-            'risk_level': results['risk_level']
+            'risk_level': results['risk_level'],
+            'method': results['method']
         }
 
         df = pd.DataFrame([save_data])
@@ -479,7 +562,7 @@ def save_prediction(input_data, results):
         file_path = 'data/heart_predictions.csv'
         df.to_csv(file_path, mode='a', header=not os.path.exists(file_path), index=False)
 
-        st.success("✅ Prediction saved to history!")
+        st.success("✅ Prediction saved to medical records!")
     except Exception as e:
         st.error(f"❌ Error saving prediction: {e}")
 
@@ -494,18 +577,12 @@ def main():
     create_sidebar()
 
     # Main content area
-    if predictor.model is None:
-        st.error("""
-        ## ❌ Model Not Found
-
-        Please ensure you have:
-        1. Run the training script first
-        2. Created the `models/` directory
-        3. Have `optimized_random_forest_model.pkl` and `feature_names.pkl` in the models folder
-
-        The model files should be created automatically when you run the training process.
+    if not JOBLIB_AVAILABLE:
+        st.warning("""
+        ⚠️ **ML Engine Notice:** 
+        Advanced machine learning features are limited. The system is using medical rule-based prediction.
+        For full AI capabilities, install: `pip install joblib scikit-learn`
         """)
-        return
 
     # Create input form and get data
     input_data = create_input_form(predictor)
@@ -522,7 +599,7 @@ def main():
 
     if predict_clicked:
         with st.spinner("🔄 Analyzing clinical data..."):
-            # Add artificial delay for better UX
+            # Add small delay for better UX
             import time
             time.sleep(1)
 
@@ -530,13 +607,10 @@ def main():
             display_results(results, input_data, predictor)
 
             # Save prediction
-            if st.button("💾 Save to Medical Records"):
+            if st.button("💾 Save to Medical Records", use_container_width=True):
                 save_prediction(input_data, results)
 
 
 # Run the application
 if __name__ == "__main__":
     main()
-
-
-
